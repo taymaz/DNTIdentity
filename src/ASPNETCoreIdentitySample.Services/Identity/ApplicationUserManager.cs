@@ -114,6 +114,7 @@ namespace ASPNETCoreIdentitySample.Services.Identity
         public override async Task<IdentityResult> CreateAsync(User user)
         {
             var result = await base.CreateAsync(user);
+            
             if (result.Succeeded)
             {
                 await _usedPasswordsService.AddToUsedPasswordsListAsync(user);
@@ -124,10 +125,13 @@ namespace ASPNETCoreIdentitySample.Services.Identity
         public override async Task<IdentityResult> CreateAsync(User user, string password)
         {
             var result = await base.CreateAsync(user, password);
-            if (result.Succeeded)
+            //In asp.net identity normaly the CreateAsync(User user, string password) method calls CreateAsync(User user) method,
+            //and because CreateAsync(User user) method is overrided, this lines of code is excess, and 
+            //can add duplicate Used Password for any password in the UsedPasswords table.
+           /* if (result.Succeeded)
             {
                 await _usedPasswordsService.AddToUsedPasswordsListAsync(user);
-            }
+            }*/
             return result;
         }
 
