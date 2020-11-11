@@ -1,11 +1,12 @@
-﻿using ASPNETCoreIdentitySample.Common.GuardToolkit;
-using ASPNETCoreIdentitySample.Common.WebToolkit;
-using ASPNETCoreIdentitySample.Services.Contracts.Identity;
+﻿using ASPNETCoreIdentitySample.Services.Contracts.Identity;
 using ASPNETCoreIdentitySample.ViewModels.Identity;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc.Filters;
 using System.Threading.Tasks;
 using System;
+using DNTCommon.Web.Core;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
 
 namespace ASPNETCoreIdentitySample.Services.Identity
 {
@@ -19,35 +20,39 @@ namespace ASPNETCoreIdentitySample.Services.Identity
     public class DynamicPermissionsAuthorizationHandler : AuthorizationHandler<DynamicPermissionRequirement>
     {
         private readonly ISecurityTrimmingService _securityTrimmingService;
+        private readonly IHttpContextAccessor _httpContextAccessor;
 
-        public DynamicPermissionsAuthorizationHandler(ISecurityTrimmingService securityTrimmingService)
+        public DynamicPermissionsAuthorizationHandler(
+            ISecurityTrimmingService securityTrimmingService,
+            IHttpContextAccessor httpContextAccessor)
         {
-            _securityTrimmingService = securityTrimmingService;
-            _securityTrimmingService.CheckArgumentIsNull(nameof(_securityTrimmingService));
+            _securityTrimmingService = securityTrimmingService ?? throw new ArgumentNullException(nameof(_securityTrimmingService));
+            _httpContextAccessor = httpContextAccessor ?? throw new ArgumentNullException(nameof(httpContextAccessor));
         }
 
         protected override async Task HandleRequirementAsync(
              AuthorizationHandlerContext context,
              DynamicPermissionRequirement requirement)
         {
-            var mvcContext = context.Resource as AuthorizationFilterContext;
-            if (mvcContext == null)
-            {
-                return;
-            }
+            var routeData = _httpContextAccessor.HttpContext.GetRouteData();
 
-            var actionDescriptor = mvcContext.ActionDescriptor;
-            var area = actionDescriptor.RouteValues["area"];
-            var controller = actionDescriptor.RouteValues["controller"];
-            var action = actionDescriptor.RouteValues["action"];
+            var areaName = routeData?.Values["area"]?.ToString();
+            var area = string.IsNullOrWhiteSpace(areaName) ? string.Empty : areaName;
+
+            var controllerName = routeData?.Values["controller"]?.ToString();
+            var controller = string.IsNullOrWhiteSpace(controllerName) ? string.Empty : controllerName;
+
+            var actionName = routeData?.Values["action"]?.ToString();
+            var action = string.IsNullOrWhiteSpace(actionName) ? string.Empty : actionName;
 
             // How to access form values from an AuthorizationHandler
-            var request = mvcContext.HttpContext.Request;
+            var request = _httpContextAccessor.HttpContext.Request;
             if (request.Method.Equals("post", StringComparison.OrdinalIgnoreCase))
             {
                 if (request.IsAjaxRequest() && request.ContentType.Contains("application/json"))
                 {
-                    var model = await request.DeserializeJsonBodyAsAsync<RoleViewModel>();
+                    var httpRequestInfoService = _httpContextAccessor.HttpContext.RequestServices.GetRequiredService<IHttpRequestInfoService>();
+                    var model = await httpRequestInfoService.DeserializeRequestJsonBodyAsAsync<RoleViewModel>();
                     if (model != null)
                     {
 

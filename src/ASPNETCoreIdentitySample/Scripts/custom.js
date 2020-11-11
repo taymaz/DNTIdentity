@@ -4,20 +4,32 @@
 });
 
 //-----------------------------------------------bootstrap
-$(document).ready(function () {
-    $('ul.nav.navbar-nav, ul.list-group, ul.nav.nav-tabs').find('a[href="' + location.pathname + '"]')
-                          .closest('li')
-                          .addClass('active');
-
+$(function () {
+    $(".navbar-nav .nav-item, .navbar-nav .dropdown-item").each(function () {
+        var href = $(this).find('a').attr('href');
+        if (!href) {
+            href = $(this).attr('href');
+        }
+        if (href === location.pathname) {
+            $(this).addClass('active');
+        }
+    });
 });
 
 $.validator.setDefaults({
+    ignore: "", // for hidden tabs and also textarea's
+    errorElement: 'span',
+    errorPlacement: function (error, element) {
+        error.addClass('invalid-feedback');
+        element.closest('.form-group').append(error);
+    },
     highlight: function (element, errorClass, validClass) {
         if (element.type === 'radio') {
             this.findByName(element.name).addClass(errorClass).removeClass(validClass);
         } else {
             $(element).addClass(errorClass).removeClass(validClass);
-            $(element).closest('.form-group').removeClass('has-success').addClass('has-error');
+            $(element).addClass('is-invalid').removeClass('is-valid');
+            $(element).closest('.form-group').find('.input-group-text, label').removeClass('text-success').addClass('text-danger');
         }
         $(element).trigger('highlited');
     },
@@ -26,23 +38,12 @@ $.validator.setDefaults({
             this.findByName(element.name).removeClass(errorClass).addClass(validClass);
         } else {
             $(element).removeClass(errorClass).addClass(validClass);
-            $(element).closest('.form-group').removeClass('has-error').addClass('has-success');
+            $(element).removeClass('is-invalid').addClass('is-valid');
+            $(element).closest('.form-group').find('.input-group-text, label').removeClass('text-danger').addClass('text-success');
         }
         $(element).trigger('unhighlited');
     }
 });
-
-$(function () {
-    $('form').each(function () {
-        $(this).find('div.form-group').each(function () {
-            if ($(this).find('span.field-validation-error').length > 0) {
-                $(this).addClass('has-error');
-            }
-        });
-    });
-});
-
-$.validator.setDefaults({ ignore: "" }); // for hidden tabs and also textarea's
 
 function removeAllTagsAndTrim(html) {
     return !html ? "" : $.trim(html.replace(/(<([^>]+)>)/ig, ""));
@@ -72,8 +73,7 @@ function defrm() {
 }
 if (window.top !== window.self) {
     try {
-        if (window.top.location.host)
-        { /* will throw */ }
+        if (window.top.location.host) { /* will throw */ }
         else {
             defrm(); /* chrome */
         }
@@ -87,7 +87,7 @@ if (window.top !== window.self) {
 function dataAjaxBegin() {
     $.bootstrapModalAlert({
         caption: 'شروع انجام عملیات',
-        body: '<div class="alert alert-info"> <span class="fa fa-thumbs-up" aria-hidden="true"></span> درحال ارسال اطلاعات به سرور. لطفا اندکی تامل نمائید. </div>'
+        body: '<div class="alert alert-info"> <span class="fas fa-thumbs-up" aria-hidden="true"></span> درحال ارسال اطلاعات به سرور. لطفا اندکی تامل نمائید. </div>'
     });
     return true;
 }
@@ -95,7 +95,7 @@ function dataAjaxBegin() {
 function dataAjaxSuccess(data, status, xhr) {
     $.bootstrapModalAlert({
         caption: 'تائید انجام عملیات',
-        body: '<div class="alert alert-success"> <span class="fa fa-thumbs-up" aria-hidden="true"></span> عملیات درخواستی با موفقیت انجام شد.</div>'
+        body: '<div class="alert alert-success"> <span class="fas fa-thumbs-up" aria-hidden="true"></span> عملیات درخواستی با موفقیت انجام شد.</div>'
     });
 }
 
@@ -107,7 +107,7 @@ function dataAjaxFailure(xhr, status, error) {
 
     $.bootstrapModalAlert({
         caption: 'خطا در انجام عملیات',
-        body: '<div class="alert alert-danger"> <span class="fa fa-thumbs-down" aria-hidden="true"></span> ' + xhr.responseText + '</div>'
+        body: '<div class="alert alert-danger"> <span class="fas fa-thumbs-down" aria-hidden="true"></span> ' + xhr.responseText + '</div>'
     });
 }
 //-----------------------Ajax forms
@@ -115,8 +115,8 @@ function dataAjaxFailure(xhr, status, error) {
 //--------------------- Set dir rtl
 function checkRTL(s) {
     var ltrChars = 'A-Za-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02B8\u0300-\u0590\u0800-\u1FFF' + '\u2C00-\uFB1C\uFDFE-\uFE6F\uFEFD-\uFFFF',
-    rtlChars = '\u0591-\u07FF\uFB1D-\uFDFD\uFE70-\uFEFC',
-    rtlDirCheck = new RegExp('^[^' + ltrChars + ']*[' + rtlChars + ']');
+        rtlChars = '\u0591-\u07FF\uFB1D-\uFDFD\uFE70-\uFEFC',
+        rtlDirCheck = new RegExp('^[^' + ltrChars + ']*[' + rtlChars + ']');
     return rtlDirCheck.test(s);
 }
 function setDirection(selector) {

@@ -1,32 +1,34 @@
-﻿using ASPNETCoreIdentitySample.Common.GuardToolkit;
-using ASPNETCoreIdentitySample.DataLayer.Context;
+﻿using ASPNETCoreIdentitySample.Entities.AuditableEntity;
 using ASPNETCoreIdentitySample.Entities.Identity;
+using ASPNETCoreIdentitySample.ViewModels.Identity.Settings;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
+using Microsoft.Extensions.Options;
 using System;
+using System.Text.Json;
 
 namespace ASPNETCoreIdentitySample.Services.Identity.Logger
 {
     public class DbLogger : ILogger
     {
-        private readonly Func<string, LogLevel, bool> _filter;
         private readonly string _loggerName;
         private readonly IServiceProvider _serviceProvider;
+        private readonly DbLoggerProvider _loggerProvider;
+        private readonly IOptions<SiteSettings> _siteSettings;
+        private readonly LogLevel _minLevel;
 
         public DbLogger(
+            DbLoggerProvider loggerProvider,
             IServiceProvider serviceProvider,
             string loggerName,
-            Func<string, LogLevel, bool> filter)
+            IOptions<SiteSettings> siteSettings)
         {
             _loggerName = loggerName;
-
-            _filter = filter;
-            _filter.CheckArgumentIsNull(nameof(_filter));
-
-            _serviceProvider = serviceProvider;
-            _serviceProvider.CheckArgumentIsNull(nameof(_serviceProvider));
+            _siteSettings = siteSettings ?? throw new ArgumentNullException(nameof(_siteSettings));
+            _minLevel = _siteSettings.Value.Logging.LogLevel.Default;
+            _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(_serviceProvider));
+            _loggerProvider = loggerProvider ?? throw new ArgumentNullException(nameof(_loggerProvider));
         }
 
         public IDisposable BeginScope<TState>(TState state)
@@ -36,7 +38,7 @@ namespace ASPNETCoreIdentitySample.Services.Identity.Logger
 
         public bool IsEnabled(LogLevel logLevel)
         {
-            return _filter(_loggerName, logLevel);
+            return logLevel >= _minLevel;
         }
 
         public void Log<TState>(
@@ -68,7 +70,7 @@ namespace ASPNETCoreIdentitySample.Services.Identity.Logger
                 return;
             }
 
-            var httpContextAccessor = _serviceProvider.GetRequiredService<IHttpContextAccessor>();
+            var httpContextAccessor = _serviceProvider.GetService<IHttpContextAccessor>();
             var appLogItem = new AppLogItem
             {
                 Url = httpContextAccessor?.HttpContext != null ? httpContextAccessor.HttpContext.Request.Path.ToString() : string.Empty,
@@ -77,39 +79,22 @@ namespace ASPNETCoreIdentitySample.Services.Identity.Logger
                 Logger = _loggerName,
                 Message = message
             };
+            var props = httpContextAccessor?.GetShadowProperties();
             setStateJson(state, appLogItem);
-            saveLogItem(appLogItem);
+            _loggerProvider.AddLogItem(new LoggerItem { Props = props, AppLogItem = appLogItem });
         }
 
         private static void setStateJson<TState>(TState state, AppLogItem appLogItem)
         {
             try
             {
-                appLogItem.StateJson = JsonConvert.SerializeObject(
+                appLogItem.StateJson = JsonSerializer.Serialize(
                     state,
-                    Formatting.Indented,
-                    new JsonSerializerSettings
+                    new JsonSerializerOptions
                     {
-                        DefaultValueHandling = DefaultValueHandling.Include
+                        IgnoreNullValues = true,
+                        WriteIndented = true
                     });
-            }
-            catch
-            {
-                // don't throw exceptions from logger
-            }
-        }
-
-        private void saveLogItem(AppLogItem appLogItem)
-        {
-            try
-            {
-                // We need a separate context for the logger to call its SaveChanges several times,
-                // without using the current request's context and changing its internal state.
-                _serviceProvider.RunScopedContext(context =>
-                {
-                    context.Set<AppLogItem>().Add(appLogItem);
-                    context.SaveChanges();
-                });
             }
             catch
             {

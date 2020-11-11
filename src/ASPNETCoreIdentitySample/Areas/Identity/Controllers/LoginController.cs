@@ -1,5 +1,4 @@
-﻿using ASPNETCoreIdentitySample.Common.GuardToolkit;
-using ASPNETCoreIdentitySample.Services.Contracts.Identity;
+﻿using ASPNETCoreIdentitySample.Services.Contracts.Identity;
 using ASPNETCoreIdentitySample.ViewModels.Identity.Settings;
 using ASPNETCoreIdentitySample.ViewModels.Identity;
 using DNTBreadCrumb.Core;
@@ -9,6 +8,9 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Threading.Tasks;
+using DNTCommon.Web.Core;
+using System;
+using DNTCaptcha.Core.Providers;
 
 namespace ASPNETCoreIdentitySample.Areas.Identity.Controllers
 {
@@ -28,20 +30,14 @@ namespace ASPNETCoreIdentitySample.Areas.Identity.Controllers
             IOptionsSnapshot<SiteSettings> siteOptions,
             ILogger<LoginController> logger)
         {
-            _signInManager = signInManager;
-            _signInManager.CheckArgumentIsNull(nameof(_signInManager));
-
-            _userManager = userManager;
-            _userManager.CheckArgumentIsNull(nameof(_userManager));
-
-            _siteOptions = siteOptions;
-            _siteOptions.CheckArgumentIsNull(nameof(_siteOptions));
-
-            _logger = logger;
-            _logger.CheckArgumentIsNull(nameof(_logger));
+            _signInManager = signInManager ?? throw new ArgumentNullException(nameof(_signInManager));
+            _userManager = userManager ?? throw new ArgumentNullException(nameof(_userManager));
+            _siteOptions = siteOptions ?? throw new ArgumentNullException(nameof(_siteOptions));
+            _logger = logger ?? throw new ArgumentNullException(nameof(_logger));
         }
 
         [BreadCrumb(Title = "ایندکس", Order = 1)]
+        [NoBrowserCache]
         public IActionResult Index(string returnUrl = null)
         {
             ViewData["ReturnUrl"] = returnUrl;
@@ -50,7 +46,8 @@ namespace ASPNETCoreIdentitySample.Areas.Identity.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [ValidateDNTCaptcha(CaptchaGeneratorLanguage = DNTCaptcha.Core.Providers.Language.Persian)]
+        [ValidateDNTCaptcha(CaptchaGeneratorLanguage = Language.Persian,
+                            CaptchaGeneratorDisplayMode = DisplayMode.SumOfTwoNumbers)]
         public async Task<IActionResult> Index(LoginViewModel model, string returnUrl = null)
         {
             ViewData["ReturnUrl"] = returnUrl;
@@ -121,11 +118,13 @@ namespace ASPNETCoreIdentitySample.Areas.Identity.Controllers
 
         public async Task<IActionResult> LogOff()
         {
-            var user = await _userManager.FindByNameAsync(User.Identity.Name);
+            var user = User.Identity.IsAuthenticated ? await _userManager.FindByNameAsync(User.Identity.Name) : null;
             await _signInManager.SignOutAsync();
-            await _userManager.UpdateSecurityStampAsync(user);
-
-            _logger.LogInformation(4, $"{user.UserName} logged out.");
+            if (user != null)
+            {
+                await _userManager.UpdateSecurityStampAsync(user);
+                _logger.LogInformation(4, $"{user.UserName} logged out.");
+            }
 
             return RedirectToAction(nameof(HomeController.Index), "Home");
         }

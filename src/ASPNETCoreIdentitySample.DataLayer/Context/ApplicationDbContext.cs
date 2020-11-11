@@ -1,5 +1,4 @@
 using ASPNETCoreIdentitySample.Common.GuardToolkit;
-using ASPNETCoreIdentitySample.Common.PersianToolkit;
 using ASPNETCoreIdentitySample.Entities.AuditableEntity;
 using ASPNETCoreIdentitySample.Entities.Identity;
 using ASPNETCoreIdentitySample.ViewModels.Identity.Settings;
@@ -15,8 +14,10 @@ using System.Threading;
 using System;
 using ASPNETCoreIdentitySample.Entities;
 using ASPNETCoreIdentitySample.DataLayer.Mappings;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
+using ASPNETCoreIdentitySample.Common.EFCoreToolkit;
 
 namespace ASPNETCoreIdentitySample.DataLayer.Context
 {
@@ -29,8 +30,10 @@ namespace ASPNETCoreIdentitySample.DataLayer.Context
         IdentityDbContext<User, Role, int, UserClaim, UserRole, UserLogin, RoleClaim, UserToken>,
         IUnitOfWork
     {
+        private IDbContextTransaction _transaction;
+
         // we can't use constructor injection anymore, because we are using the `AddDbContextPool<>`
-        public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
+        public ApplicationDbContext(DbContextOptions options)
             : base(options) { }
 
         #region BaseClass
@@ -44,14 +47,43 @@ namespace ASPNETCoreIdentitySample.DataLayer.Context
             Set<TEntity>().AddRange(entities);
         }
 
-        public void ExecuteSqlCommand(string query)
+        public void BeginTransaction()
         {
-            Database.ExecuteSqlCommand(query);
+            _transaction = Database.BeginTransaction();
         }
 
-        public void ExecuteSqlCommand(string query, params object[] parameters)
+        public void RollbackTransaction()
         {
-            Database.ExecuteSqlCommand(query, parameters);
+            if (_transaction == null)
+            {
+                throw new NullReferenceException("Please call `BeginTransaction()` method first.");
+            }
+            _transaction.Rollback();
+        }
+
+        public void CommitTransaction()
+        {
+            if (_transaction == null)
+            {
+                throw new NullReferenceException("Please call `BeginTransaction()` method first.");
+            }
+            _transaction.Commit();
+        }
+
+        public override void Dispose()
+        {
+            _transaction?.Dispose();
+            base.Dispose();
+        }
+
+        public void ExecuteSqlInterpolatedCommand(FormattableString query)
+        {
+            Database.ExecuteSqlInterpolated(query);
+        }
+
+        public void ExecuteSqlRawCommand(string query, params object[] parameters)
+        {
+            Database.ExecuteSqlRaw(query, parameters);
         }
 
         public T GetShadowPropertyValue<T>(object entity, string propertyName) where T : IConvertible
@@ -59,7 +91,7 @@ namespace ASPNETCoreIdentitySample.DataLayer.Context
             var value = this.Entry(entity).Property(propertyName).CurrentValue;
             return value != null
                 ? (T)Convert.ChangeType(value, typeof(T), CultureInfo.InvariantCulture)
-                : default(T);
+                : default;
         }
 
         public object GetShadowPropertyValue(object entity, string propertyName)
@@ -91,7 +123,7 @@ namespace ASPNETCoreIdentitySample.DataLayer.Context
 
         public override int SaveChanges()
         {
-            ChangeTracker.DetectChanges();
+            ChangeTracker.DetectChanges(); //NOTE: changeTracker.Entries<T>() will call it automatically.
 
             beforeSaveTriggers();
 
@@ -129,15 +161,13 @@ namespace ASPNETCoreIdentitySample.DataLayer.Context
         {
             validateEntities();
             setShadowProperties();
-            this.ApplyCorrectYeKe();
         }
 
         private void setShadowProperties()
         {
             // we can't use constructor injection anymore, because we are using the `AddDbContextPool<>`
-            var httpContextAccessor = this.GetService<IHttpContextAccessor>();
-            httpContextAccessor.CheckArgumentIsNull(nameof(httpContextAccessor));
-            ChangeTracker.SetAuditableEntityPropertyValues(httpContextAccessor);
+            var props = this.GetService<IHttpContextAccessor>()?.GetShadowProperties();
+            ChangeTracker.SetAuditableEntityPropertyValues(props);
         }
 
         private void validateEntities()
@@ -147,7 +177,6 @@ namespace ASPNETCoreIdentitySample.DataLayer.Context
             {
                 // we can't use constructor injection anymore, because we are using the `AddDbContextPool<>`
                 var loggerFactory = this.GetService<ILoggerFactory>();
-                loggerFactory.CheckArgumentIsNull(nameof(loggerFactory));
                 var logger = loggerFactory.CreateLogger<ApplicationDbContext>();
                 logger.LogError(errors);
                 throw new InvalidOperationException(errors);
@@ -163,27 +192,14 @@ namespace ASPNETCoreIdentitySample.DataLayer.Context
         {
             // it should be placed here, otherwise it will rewrite the following settings!
             base.OnModelCreating(builder);
+
             // we can't use constructor injection anymore, because we are using the `AddDbContextPool<>`
-            var siteSettings = this.GetService<IOptionsSnapshot<SiteSettings>>();
-            siteSettings.CheckArgumentIsNull(nameof(siteSettings));
-            siteSettings.Value.CheckArgumentIsNull(nameof(siteSettings.Value));
             // Adds all of the ASP.NET Core Identity related mappings at once.
-            builder.AddCustomIdentityMappings(siteSettings.Value);
+            builder.AddCustomIdentityMappings(this.GetService<IOptionsSnapshot<SiteSettings>>()?.Value);
 
             // Custom application mappings
-            builder.Entity<Category>(build =>
-            {
-                build.Property(category => category.Name).HasMaxLength(450).IsRequired();
-                build.Property(category => category.Title).IsRequired();
-            });
-
-            builder.Entity<Product>(build =>
-            {
-                build.Property(product => product.Name).HasMaxLength(450).IsRequired();
-                build.HasOne(product => product.Category)
-                       .WithMany(category => category.Products);
-            });
-
+            builder.SetDecimalPrecision();
+            builder.AddDateTimeUtcKindConverter();
 
             // This should be placed here, at the end.
             builder.AddAuditableShadowProperties();

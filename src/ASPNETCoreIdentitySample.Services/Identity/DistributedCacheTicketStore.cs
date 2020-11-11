@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Threading.Tasks;
-using ASPNETCoreIdentitySample.Common.GuardToolkit;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.Extensions.Caching.Distributed;
@@ -19,8 +18,7 @@ namespace ASPNETCoreIdentitySample.Services.Identity
 
         public DistributedCacheTicketStore(IDistributedCache cache)
         {
-            _cache = cache;
-            _cache.CheckArgumentIsNull(nameof(_cache));
+            _cache = cache ?? throw new ArgumentNullException(nameof(_cache));
         }
 
         public async Task<string> StoreAsync(AuthenticationTicket ticket)
@@ -32,6 +30,8 @@ namespace ASPNETCoreIdentitySample.Services.Identity
 
         public Task RenewAsync(string key, AuthenticationTicket ticket)
         {
+            // NOTE: Using `services.enableImmediateLogout();` will cause this method to be called per each request.
+
             var options = new DistributedCacheEntryOptions();
 
             var expiresUtc = ticket.Properties.ExpiresUtc;
@@ -40,7 +40,7 @@ namespace ASPNETCoreIdentitySample.Services.Identity
                 options.SetAbsoluteExpiration(expiresUtc.Value);
             }
 
-            if (ticket.Properties.AllowRefresh.GetValueOrDefault(false))
+            if (ticket.Properties.AllowRefresh ?? false)
             {
                 options.SetSlidingExpiration(TimeSpan.FromMinutes(30)); // TODO: configurable.
             }

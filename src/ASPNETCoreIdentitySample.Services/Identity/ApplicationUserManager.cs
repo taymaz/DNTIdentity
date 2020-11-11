@@ -1,12 +1,8 @@
-﻿using ASPNETCoreIdentitySample.Common.GuardToolkit;
-using ASPNETCoreIdentitySample.Common.IdentityToolkit;
-using ASPNETCoreIdentitySample.Common.WebToolkit;
-using ASPNETCoreIdentitySample.DataLayer.Context;
+﻿using ASPNETCoreIdentitySample.DataLayer.Context;
 using ASPNETCoreIdentitySample.Entities.Identity;
 using ASPNETCoreIdentitySample.Services.Contracts.Identity;
 using ASPNETCoreIdentitySample.ViewModels.Identity;
 using DNTPersianUtils.Core;
-using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
@@ -14,10 +10,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Collections.Generic;
-using System.Data.SqlClient;
 using System.Linq;
 using System.Threading.Tasks;
 using System;
+using DNTCommon.Web.Core;
 
 namespace ASPNETCoreIdentitySample.Services.Identity
 {
@@ -57,44 +53,22 @@ namespace ASPNETCoreIdentitySample.Services.Identity
             IHttpContextAccessor contextAccessor,
             IUnitOfWork uow,
             IUsedPasswordsService usedPasswordsService)
-            : base((UserStore<User, Role, ApplicationDbContext, int, UserClaim, UserRole, UserLogin, UserToken, RoleClaim>)store, optionsAccessor, passwordHasher, userValidators, passwordValidators, keyNormalizer, errors, services, logger)
+            : base(
+                (UserStore<User, Role, ApplicationDbContext, int, UserClaim, UserRole, UserLogin, UserToken, RoleClaim>)store,
+                  optionsAccessor, passwordHasher, userValidators, passwordValidators, keyNormalizer, errors, services, logger)
         {
-            _userStore = store;
-            _userStore.CheckArgumentIsNull(nameof(_userStore));
-
-            _optionsAccessor = optionsAccessor;
-            _optionsAccessor.CheckArgumentIsNull(nameof(_optionsAccessor));
-
-            _passwordHasher = passwordHasher;
-            _passwordHasher.CheckArgumentIsNull(nameof(_passwordHasher));
-
-            _userValidators = userValidators;
-            _userValidators.CheckArgumentIsNull(nameof(_userValidators));
-
-            _passwordValidators = passwordValidators;
-            _passwordValidators.CheckArgumentIsNull(nameof(_passwordValidators));
-
-            _keyNormalizer = keyNormalizer;
-            _keyNormalizer.CheckArgumentIsNull(nameof(_keyNormalizer));
-
-            _errors = errors;
-            _errors.CheckArgumentIsNull(nameof(_errors));
-
-            _services = services;
-            _services.CheckArgumentIsNull(nameof(_services));
-
-            _logger = logger;
-            _logger.CheckArgumentIsNull(nameof(_logger));
-
-            _contextAccessor = contextAccessor;
-            _contextAccessor.CheckArgumentIsNull(nameof(_contextAccessor));
-
-            _uow = uow;
-            _uow.CheckArgumentIsNull(nameof(_uow));
-
-            _usedPasswordsService = usedPasswordsService;
-            _usedPasswordsService.CheckArgumentIsNull(nameof(_usedPasswordsService));
-
+            _userStore = store ?? throw new ArgumentNullException(nameof(_userStore));
+            _optionsAccessor = optionsAccessor ?? throw new ArgumentNullException(nameof(_optionsAccessor));
+            _passwordHasher = passwordHasher ?? throw new ArgumentNullException(nameof(_passwordHasher));
+            _userValidators = userValidators ?? throw new ArgumentNullException(nameof(_userValidators));
+            _passwordValidators = passwordValidators ?? throw new ArgumentNullException(nameof(_passwordValidators));
+            _keyNormalizer = keyNormalizer ?? throw new ArgumentNullException(nameof(_keyNormalizer));
+            _errors = errors ?? throw new ArgumentNullException(nameof(_errors));
+            _services = services ?? throw new ArgumentNullException(nameof(_services));
+            _logger = logger ?? throw new ArgumentNullException(nameof(_logger));
+            _contextAccessor = contextAccessor ?? throw new ArgumentNullException(nameof(_contextAccessor));
+            _uow = uow ?? throw new ArgumentNullException(nameof(_uow));
+            _usedPasswordsService = usedPasswordsService ?? throw new ArgumentNullException(nameof(_usedPasswordsService));
             _users = uow.Set<User>();
             _roles = uow.Set<Role>();
         }
@@ -208,8 +182,7 @@ namespace ASPNETCoreIdentitySample.Services.Identity
                     return null;
                 }
 
-                int result;
-                return !int.TryParse(userId, out result) ? (int?)null : result;
+                return !int.TryParse(userId, out int result) ? (int?)null : result;
             }
         }
 
@@ -241,16 +214,16 @@ namespace ASPNETCoreIdentitySample.Services.Identity
         public async Task<byte[]> GetEmailImageAsync(int? userId)
         {
             if (userId == null)
-                return TextToImage.EMailToImage("?");
+                return "?".TextToImage(new TextToImageOptions());
 
             var user = await FindByIdAsync(userId.Value.ToString());
             if (user == null)
-                return TextToImage.EMailToImage("?");
+                return "?".TextToImage(new TextToImageOptions());
 
             if (!user.IsEmailPublic)
-                return TextToImage.EMailToImage("?");
+                return "?".TextToImage(new TextToImageOptions());
 
-            return TextToImage.EMailToImage(user.Email);
+            return user.Email.TextToImage(new TextToImageOptions());
         }
 
         public async Task<PagedUsersListViewModel> GetPagedUsersListAsync(SearchUsersViewModel model, int pageNumber)
@@ -274,8 +247,7 @@ namespace ASPNETCoreIdentitySample.Services.Identity
 
                 if (model.IsUserId)
                 {
-                    int userId;
-                    if (int.TryParse(model.TextToFind, out userId))
+                    if (int.TryParse(model.TextToFind, out int userId))
                     {
                         query = query.Where(x => x.Id == userId);
                     }
@@ -403,6 +375,7 @@ namespace ASPNETCoreIdentitySample.Services.Identity
             {
                 selectedRoleIds = new List<int>();
             }
+
             var newRolesToAdd = selectedRoleIds.Except(currentUserRoleIds).ToList();
             foreach (var roleId in newRolesToAdd)
             {
@@ -427,6 +400,11 @@ namespace ASPNETCoreIdentitySample.Services.Identity
                 return result;
             }
             return await UpdateSecurityStampAsync(user);
+        }
+
+        Task<IdentityResult> IApplicationUserManager.UpdatePasswordHash(User user, string newPassword, bool validatePassword)
+        {
+            return base.UpdatePasswordHash(user, newPassword, validatePassword);
         }
 
         #endregion

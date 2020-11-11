@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Xml.Linq;
-using ASPNETCoreIdentitySample.Common.GuardToolkit;
 using ASPNETCoreIdentitySample.DataLayer.Context;
 using ASPNETCoreIdentitySample.Entities.Identity;
 using Microsoft.AspNetCore.DataProtection.Repositories;
+using DNTCommon.Web.Core;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace ASPNETCoreIdentitySample.Services.Identity
 {
@@ -16,31 +18,46 @@ namespace ASPNETCoreIdentitySample.Services.Identity
     public class DataProtectionKeyService : IXmlRepository
     {
         private readonly IServiceProvider _serviceProvider;
+        private readonly ILogger<DataProtectionKeyService> _logger;
 
-        public DataProtectionKeyService(IServiceProvider serviceProvider)
+        public DataProtectionKeyService(IServiceProvider serviceProvider, ILogger<DataProtectionKeyService> logger)
         {
-            _serviceProvider = serviceProvider;
-            _serviceProvider.CheckArgumentIsNull(nameof(_serviceProvider));
+            _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
         public IReadOnlyCollection<XElement> GetAllElements()
         {
-            return _serviceProvider.RunScopedContext<ReadOnlyCollection<XElement>>(context =>
+            return _serviceProvider.RunScopedService<IUnitOfWork, ReadOnlyCollection<XElement>>(context =>
             {
-                var dataProtectionKeys = context.Set<AppDataProtectionKey>();
-                return new ReadOnlyCollection<XElement>(dataProtectionKeys.Select(k => XElement.Parse(k.XmlData)).ToList());
+                var dataProtectionKeys = context.Set<AppDataProtectionKey>().AsNoTracking();
+                var logger = _logger;
+                return dataProtectionKeys.Select(key => tryParseKeyXml(key.XmlData, logger)).ToList().AsReadOnly();
             });
+        }
+
+        private static XElement tryParseKeyXml(string xml, ILogger logger)
+        {
+            try
+            {
+                return XElement.Parse(xml);
+            }
+            catch (Exception e)
+            {
+                logger.LogWarning($"An exception occurred while parsing the key xml '{xml}'.", e);
+                return null;
+            }
         }
 
         public void StoreElement(XElement element, string friendlyName)
         {
             // We need a separate context to call its SaveChanges several times,
             // without using the current request's context and changing its internal state.
-            _serviceProvider.RunScopedContext(context =>
+            _serviceProvider.RunScopedService<IUnitOfWork>(context =>
             {
                 var dataProtectionKeys = context.Set<AppDataProtectionKey>();
                 var entity = dataProtectionKeys.SingleOrDefault(k => k.FriendlyName == friendlyName);
-                if (null != entity)
+                if (entity != null)
                 {
                     entity.XmlData = element.ToString();
                     dataProtectionKeys.Update(entity);
@@ -50,7 +67,7 @@ namespace ASPNETCoreIdentitySample.Services.Identity
                     dataProtectionKeys.Add(new AppDataProtectionKey
                     {
                         FriendlyName = friendlyName,
-                        XmlData = element.ToString()
+                        XmlData = element.ToString(SaveOptions.DisableFormatting)
                     });
                 }
                 context.SaveChanges();

@@ -16,13 +16,11 @@ namespace ASPNETCoreIdentitySample.IocConfig
     {
         public static IServiceCollection AddCustomServices(this IServiceCollection services)
         {
-            services.AddScoped<IUnitOfWork, ApplicationDbContext>();
             services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
             services.AddScoped<IPrincipal>(provider =>
-                provider.GetService<IHttpContextAccessor>()?.HttpContext?.User ?? ClaimsPrincipal.Current);
+                provider.GetRequiredService<IHttpContextAccessor>()?.HttpContext?.User ?? ClaimsPrincipal.Current);
 
             services.AddScoped<ILookupNormalizer, CustomNormalizer>();
-            services.AddScoped<UpperInvariantLookupNormalizer, CustomNormalizer>();
 
             services.AddScoped<ISecurityStampValidator, CustomSecurityStampValidator>();
             services.AddScoped<SecurityStampValidator<User>, CustomSecurityStampValidator>();

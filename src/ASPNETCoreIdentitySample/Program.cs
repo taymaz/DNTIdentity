@@ -1,7 +1,7 @@
-﻿using System.Collections.Generic;
-using System.IO;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.Extensions.Configuration;
+﻿using Microsoft.AspNetCore.Hosting;
+using ASPNETCoreIdentitySample.Services.Identity.Logger;
+using ASPNETCoreIdentitySample.IocConfig;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace ASPNETCoreIdentitySample
@@ -10,35 +10,30 @@ namespace ASPNETCoreIdentitySample
     {
         public static void Main(string[] args)
         {
-            var host = new WebHostBuilder()
-                .UseKestrel()
-                .UseContentRoot(Directory.GetCurrentDirectory())
-                .ConfigureAppConfiguration((hostingContext, config) =>
-                {
-                    var env = hostingContext.HostingEnvironment;
-                    config.SetBasePath(env.ContentRootPath);
-                    config.AddInMemoryCollection(new[]
-                           {
-                             new KeyValuePair<string,string>("the-key", "the-value")
-                           })
-                           .AddJsonFile("appsettings.json", reloadOnChange: true, optional: false)
-                           .AddJsonFile($"appsettings.{env}.json", optional: true)
-                           .AddEnvironmentVariables();
-                })
-                .ConfigureLogging((hostingContext, logging) =>
-                {
-                    logging.AddDebug();
-                    logging.AddConsole();
-                })
-                .UseIISIntegration()
-                .UseDefaultServiceProvider((context, options) =>
-                {
-                    options.ValidateScopes = context.HostingEnvironment.IsDevelopment();
-                })
-                .UseStartup<Startup>()
-                .Build();
-
+            var host = CreateHostBuilder(args).Build();
+            host.Services.InitializeDb();
             host.Run();
         }
+
+        public static IHostBuilder CreateHostBuilder(string[] args) =>
+            Host.CreateDefaultBuilder(args)
+                .ConfigureWebHostDefaults(webBuilder =>
+                {
+                    webBuilder.ConfigureLogging((hostingContext, logging) =>
+                               {
+                                   logging.ClearProviders();
+                                   
+                                   logging.AddDebug();
+
+                                   if (hostingContext.HostingEnvironment.IsDevelopment())
+                                   {
+                                       logging.AddConsole();
+                                   }
+
+                                   logging.AddDbLogger(); // You can change its Log Level using the `appsettings.json` file -> Logging -> LogLevel -> Default
+								   logging.AddConfiguration(hostingContext.Configuration.GetSection("Logging"));
+                               })
+                              .UseStartup<Startup>();
+                });
     }
 }

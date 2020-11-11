@@ -1,5 +1,4 @@
-﻿using ASPNETCoreIdentitySample.Common.GuardToolkit;
-using ASPNETCoreIdentitySample.DataLayer.Context;
+﻿using ASPNETCoreIdentitySample.DataLayer.Context;
 using ASPNETCoreIdentitySample.Entities.AuditableEntity;
 using ASPNETCoreIdentitySample.Entities.Identity;
 using ASPNETCoreIdentitySample.Services.Contracts.Identity;
@@ -26,19 +25,13 @@ namespace ASPNETCoreIdentitySample.Services.Identity
             IPasswordHasher<User> passwordHasher,
             IOptionsSnapshot<SiteSettings> configurationRoot)
         {
-            _uow = uow;
-            _uow.CheckArgumentIsNull(nameof(_uow));
+            _uow = uow ?? throw new ArgumentNullException(nameof(_uow));
 
-            _userUsedPasswords = _uow.Set<UserUsedPassword>();
-            _userUsedPasswords.CheckArgumentIsNull(nameof(_userUsedPasswords));
-
-            _passwordHasher = passwordHasher;
-            _passwordHasher.CheckArgumentIsNull(nameof(_passwordHasher));
-
-            configurationRoot.CheckArgumentIsNull(nameof(configurationRoot));
+            _userUsedPasswords = _uow.Set<UserUsedPassword>() ?? throw new ArgumentNullException(nameof(_userUsedPasswords));
+            _passwordHasher = passwordHasher ?? throw new ArgumentNullException(nameof(_passwordHasher));
+            if (configurationRoot == null) throw new ArgumentNullException(nameof(configurationRoot));
             var configurationRootValue = configurationRoot.Value;
-            configurationRootValue.CheckArgumentIsNull(nameof(configurationRootValue));
-
+            if (configurationRootValue == null) throw new ArgumentNullException(nameof(configurationRootValue));
             _notAllowedPreviouslyUsedPasswords = configurationRootValue.NotAllowedPreviouslyUsedPasswords;
             _changePasswordReminderDays = configurationRootValue.ChangePasswordReminderDays;
         }
@@ -53,21 +46,21 @@ namespace ASPNETCoreIdentitySample.Services.Identity
             await _uow.SaveChangesAsync();
         }
 
-        public async Task<DateTimeOffset?> GetLastUserPasswordChangeDateAsync(int userId)
+        public async Task<DateTime?> GetLastUserPasswordChangeDateAsync(int userId)
         {
             var lastPasswordHistory =
                 await _userUsedPasswords//.AsNoTracking() --> removes shadow properties
                                         .OrderByDescending(userUsedPassword => userUsedPassword.Id)
-                                        .FirstOrDefaultAsync(userUsedPassword => userUsedPassword.UserId == userId)
-                                        ;
-
+                                        .FirstOrDefaultAsync(userUsedPassword => userUsedPassword.UserId == userId);
             if (lastPasswordHistory == null)
             {
                 return null;
             }
 
             var createdDateValue = _uow.GetShadowPropertyValue(lastPasswordHistory, AuditableShadowProperties.CreatedDateTime);
-            return (DateTimeOffset?) createdDateValue;
+            return createdDateValue == null ?
+                      (DateTime?)null :
+                      DateTime.SpecifyKind((DateTime)createdDateValue, DateTimeKind.Utc);
         }
 
         public async Task<bool> IsLastUserPasswordTooOldAsync(int userId)
@@ -77,30 +70,30 @@ namespace ASPNETCoreIdentitySample.Services.Identity
             {
                 return false;
             }
-            return createdDateTime.Value.AddDays(_changePasswordReminderDays) < DateTimeOffset.UtcNow;
+            return createdDateTime.Value.AddDays(_changePasswordReminderDays) < DateTime.UtcNow;
         }
 
         /// <summary>
         /// This method will be used by CustomPasswordValidator automatically,
         /// every time a user wants to change his/her info.
         /// </summary>
-        public Task<bool> IsPreviouslyUsedPasswordAsync(User user, string newPassword)
+        public async Task<bool> IsPreviouslyUsedPasswordAsync(User user, string newPassword)
         {
             if (user.Id == 0)
             {
                 // A new user wants to register at our site
-                return Task.FromResult(false);
+                return false;
             }
 
             var userId = user.Id;
-            return
-                _userUsedPasswords
-                    .AsNoTracking()
-                    .Where(userUsedPassword => userUsedPassword.UserId == userId)
-                    .OrderByDescending(userUsedPassword => userUsedPassword.Id)
-                    .Select(userUsedPassword => userUsedPassword.HashedPassword)
-                    .Take(_notAllowedPreviouslyUsedPasswords)
-                    .AnyAsync(hashedPassword => _passwordHasher.VerifyHashedPassword(user, hashedPassword, newPassword) != PasswordVerificationResult.Failed);
+            var usedPasswords = await _userUsedPasswords
+                                .AsNoTracking()
+                                .Where(userUsedPassword => userUsedPassword.UserId == userId)
+                                .OrderByDescending(userUsedPassword => userUsedPassword.Id)
+                                .Select(userUsedPassword => userUsedPassword.HashedPassword)
+                                .Take(_notAllowedPreviouslyUsedPasswords)
+                                .ToListAsync();
+            return usedPasswords.Any(hashedPassword => _passwordHasher.VerifyHashedPassword(user, hashedPassword, newPassword) != PasswordVerificationResult.Failed);
         }
     }
 }

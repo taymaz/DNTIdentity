@@ -1,6 +1,4 @@
-﻿using ASPNETCoreIdentitySample.Common.GuardToolkit;
-using ASPNETCoreIdentitySample.Common.IdentityToolkit;
-using ASPNETCoreIdentitySample.Common.WebToolkit;
+﻿using ASPNETCoreIdentitySample.Common.IdentityToolkit;
 using ASPNETCoreIdentitySample.Entities.Identity;
 using ASPNETCoreIdentitySample.Services.Contracts.Identity;
 using ASPNETCoreIdentitySample.ViewModels.Identity.Emails;
@@ -14,13 +12,14 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using System.Threading.Tasks;
 using System;
+using DNTCommon.Web.Core;
 
 namespace ASPNETCoreIdentitySample.Areas.Identity.Controllers
 {
     [Authorize]
     [Area(AreaConstants.IdentityArea)]
     [BreadCrumb(Title = "تغییر کلمه‌ی عبور", UseDefaultRouteUrl = true, Order = 0)]
-    public class ChangePasswordController: Controller
+    public class ChangePasswordController : Controller
     {
         private readonly IEmailSender _emailSender;
         private readonly IApplicationUserManager _userManager;
@@ -37,23 +36,12 @@ namespace ASPNETCoreIdentitySample.Areas.Identity.Controllers
             IUsedPasswordsService usedPasswordsService,
             IOptionsSnapshot<SiteSettings> siteOptions)
         {
-            _userManager = userManager;
-            _userManager.CheckArgumentIsNull(nameof(_userManager));
-
-            _signInManager = signInManager;
-            _signInManager.CheckArgumentIsNull(nameof(_signInManager));
-
-            _passwordValidator = passwordValidator;
-            _passwordValidator.CheckArgumentIsNull(nameof(_passwordValidator));
-
-            _usedPasswordsService = usedPasswordsService;
-            _usedPasswordsService.CheckArgumentIsNull(nameof(_usedPasswordsService));
-
-            _emailSender = emailSender;
-            _emailSender.CheckArgumentIsNull(nameof(_emailSender));
-
-            _siteOptions = siteOptions;
-            _siteOptions.CheckArgumentIsNull(nameof(_siteOptions));
+            _userManager = userManager ?? throw new ArgumentNullException(nameof(_userManager));
+            _signInManager = signInManager ?? throw new ArgumentNullException(nameof(_signInManager));
+            _passwordValidator = passwordValidator ?? throw new ArgumentNullException(nameof(_passwordValidator));
+            _usedPasswordsService = usedPasswordsService ?? throw new ArgumentNullException(nameof(_usedPasswordsService));
+            _emailSender = emailSender ?? throw new ArgumentNullException(nameof(_emailSender));
+            _siteOptions = siteOptions ?? throw new ArgumentNullException(nameof(_siteOptions));
         }
 
         [BreadCrumb(Title = "ایندکس", Order = 1)]

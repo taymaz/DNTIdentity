@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Linq;
-using ASPNETCoreIdentitySample.Common.GuardToolkit;
 using Microsoft.AspNetCore.Identity;
 using ASPNETCoreIdentitySample.Common.PersianToolkit;
 using DNTPersianUtils.Core;
@@ -10,32 +9,36 @@ namespace ASPNETCoreIdentitySample.Services.Identity
     /// <summary>
     /// More info: http://www.dotnettips.info/post/2579
     /// </summary>
-    public class CustomNormalizer : UpperInvariantLookupNormalizer
+    public class CustomNormalizer : ILookupNormalizer
     {
-        public override string Normalize(string key)
+        public string NormalizeEmail(string email)
         {
-            if (string.IsNullOrWhiteSpace(key))
+            if (string.IsNullOrWhiteSpace(email))
             {
                 return null;
             }
 
-            key = key.Trim();
+            email = email.Trim();
+            email = fixGmailDots(email);
+            email = email.ToUpperInvariant();
+            return email;
+        }
 
-            if (key.IsEmailAddress())
+        public string NormalizeName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
             {
-                key = fixGmailDots(key);
-            }
-            else
-            {
-                key = key.ApplyCorrectYeKe()
-                     .RemoveDiacritics()
-                     .CleanUnderLines()
-                     .RemovePunctuation();
-                key = key.Trim().Replace(" ", "");
+                return null;
             }
 
-            key = key.ToUpperInvariant();
-            return key;
+            name = name.Trim();
+            name = name.ApplyCorrectYeKe()
+                 .RemoveDiacritics()
+                 .CleanUnderLines()
+                 .RemovePunctuation();
+            name = name.Trim().Replace(" ", "");
+            name = name.ToUpperInvariant();
+            return name;
         }
 
         private static string fixGmailDots(string email)
